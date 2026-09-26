@@ -1,0 +1,73 @@
+name: CI/CD to GitHub Pages
+
+# Run CI on pull requests and on pushes to main.
+# Only pushes to main are allowed to deploy (see the job-level `if`).
+on:
+    push:
+        branches: [main]
+    pull_request:
+        branches: [main]
+
+# Least-privilege permissions required for GitHub Pages deployment.
+permissions:
+    contents: read
+    pages: write
+    id-token: write
+
+# Allow only one concurrent deployment; don't cancel an in-progress
+# production deploy, but queue the newest request.
+concurrency:
+    group: pages
+    cancel-in-progress: false
+
+jobs:
+    # ----------------------------------------------------------
+    # CI: install dependencies and run unit tests.
+    # Runs for BOTH pull requests and pushes to main.
+    # ----------------------------------------------------------
+    test:
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+
+            - name: Setup Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version: "20"
+                  cache: npm
+
+            - name: Install dependencies
+              run: npm ci
+
+            - name: Run unit tests
+              run: npm test
+
+    # ----------------------------------------------------------
+    # CD: deploy to GitHub Pages.
+    # Depends on `test`, so a failing test blocks deployment.
+    # Only runs on a push to main — never on pull requests.
+    # ----------------------------------------------------------
+    deploy:
+        needs: test
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        runs-on: ubuntu-latest
+        environment:
+            name: github-pages
+            url: ${{ steps.deployment.outputs.page_url }}
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+
+            - name: Configure GitHub Pages
+              uses: actions/configure-pages@v5
+
+            - name: Upload Pages artifact
+              uses: actions/upload-pages-artifact@v3
+              with:
+                  # Publish the repository root (index.html lives here).
+                  path: "."
+
+            - name: Deploy to GitHub Pages
+              id: deployment
+              uses: actions/deploy-pages@v4
